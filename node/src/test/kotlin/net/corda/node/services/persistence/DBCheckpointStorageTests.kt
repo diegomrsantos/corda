@@ -351,13 +351,13 @@ class DBCheckpointStorageTests {
     }
 
     @Test(timeout = 300_000)
-    fun `Check that flow io request can be added to a checkpoint`() {
+    fun `Checkpoint can be updated with flow io request information`() {
         val (id, checkpoint) = newCheckpoint(1)
         database.transaction {
             val serializedFlowState = checkpoint.flowState.checkpointSerialize(context = CheckpointSerializationDefaults.CHECKPOINT_CONTEXT)
             checkpointStorage.addCheckpoint(id, checkpoint, serializedFlowState)
             val checkpoint = checkpointStorage.getDBCheckpoint(id)
-            assertNull(checkpoint?.ioRequestType)
+            assertNull(checkpoint!!.ioRequestType)
         }
         val instantNow = Instant.now()
         database.transaction {
@@ -367,7 +367,7 @@ class DBCheckpointStorageTests {
             val checkpoint = checkpointStorage.getDBCheckpoint(id)
             assertNotNull(checkpoint?.ioRequestType)
             val classFromCheckpoint = checkpoint?.ioRequestType!!
-            assert(classFromCheckpoint == FlowIORequest.Sleep::class.java)
+            assertEquals(FlowIORequest.Sleep::class.java, classFromCheckpoint)
         }
     }
 
