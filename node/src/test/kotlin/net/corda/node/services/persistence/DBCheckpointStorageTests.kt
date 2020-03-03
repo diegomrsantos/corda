@@ -37,12 +37,9 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import java.lang.IllegalStateException
 import java.time.Instant
 import kotlin.streams.toList
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 internal fun CheckpointStorage.checkpoints(): List<Checkpoint.Serialized> {
@@ -356,17 +353,17 @@ class DBCheckpointStorageTests {
         database.transaction {
             val serializedFlowState = checkpoint.flowState.checkpointSerialize(context = CheckpointSerializationDefaults.CHECKPOINT_CONTEXT)
             checkpointStorage.addCheckpoint(id, checkpoint, serializedFlowState)
-            val checkpoint = checkpointStorage.getDBCheckpoint(id)
-            assertNull(checkpoint!!.ioRequestType)
+            val checkpoint = checkpointStorage.getCheckpoint(id)
+            assertNull(checkpoint!!.flowIoRequest)
         }
         val instantNow = Instant.now()
         database.transaction {
             checkpointStorage.updateFlowIoRequest(id, FlowIORequest.Sleep(instantNow))
         }
         database.transaction {
-            val checkpoint = checkpointStorage.getDBCheckpoint(id)
-            assertNotNull(checkpoint?.ioRequestType)
-            val classFromCheckpoint = checkpoint?.ioRequestType!!
+            val checkpoint = checkpointStorage.getCheckpoint(id)
+            assertNotNull(checkpoint?.flowIoRequest)
+            val classFromCheckpoint = checkpoint?.flowIoRequest!!
             assertEquals(FlowIORequest.Sleep::class.java, classFromCheckpoint)
         }
     }
