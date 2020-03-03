@@ -228,9 +228,11 @@ class DBCheckpointStorage(private val checkpointPerformanceRecorder: CheckpointP
 
     override fun updateFlowIoRequest(id: StateMachineRunId, ioRequest: FlowIORequest<*>) {
         val checkpoint = getDBCheckpoint(id)
-        if (checkpoint?.ioRequestType != ioRequest) {
-            checkpoint?.ioRequestType = ioRequest.javaClass
-            currentDBSession().update(checkpoint)
+        checkpoint?.let {
+            if (it.ioRequestType != ioRequest.javaClass) {
+                it.ioRequestType = ioRequest.javaClass
+                currentDBSession().update(checkpoint)
+            }
         }
     }
 
@@ -258,7 +260,7 @@ class DBCheckpointStorage(private val checkpointPerformanceRecorder: CheckpointP
     }
 
     private fun getDBCheckpoint(id: StateMachineRunId): DBFlowCheckpoint? {
-        return currentDBSession().get(DBFlowCheckpoint::class.java, id.uuid.toString())
+        return currentDBSession().find(DBFlowCheckpoint::class.java, id.uuid.toString())
     }
 
     private fun createDBCheckpoint(
@@ -327,7 +329,6 @@ class DBCheckpointStorage(private val checkpointPerformanceRecorder: CheckpointP
         checkpoint: Checkpoint,
         serializedFlowState: SerializedBytes<FlowState>
     ): DBFlowCheckpoint {
-        val flowId = id.uuid.toString()
         val now = Instant.now()
 
         val serializedCheckpointState = checkpoint.checkpointState.storageSerialize()
@@ -337,7 +338,9 @@ class DBCheckpointStorage(private val checkpointPerformanceRecorder: CheckpointP
         val result = checkpoint.result?.let { createDBFlowResult(it, now) }
         val exceptionDetails = (checkpoint.errorState as? ErrorState.Errored)?.let { createDBFlowException(it, now) }
         // Load the previous entity from the hibernate cache so the meta data join does not get updated
-        val entity = currentDBSession().find(DBFlowCheckpoint::class.java, flowId)
+        val entity = requireNotNull(getDBCheckpoint(id)) {
+            "Checkpoint with id: ${id.uuid} does not exist in database."
+        }
         return entity.apply {
             this.blob = blob
             this.result = result
