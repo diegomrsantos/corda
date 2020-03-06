@@ -159,7 +159,6 @@ class TopLevelTransition(
                     checkpointState = currentState.checkpoint.checkpointState.copy(
                             numberOfSuspends = currentState.checkpoint.checkpointState.numberOfSuspends + 1
                     ),
-                    // we have reached a suspension point without error => set/ switch status to RUNNABLE
                     status = Checkpoint.FlowStatus.RUNNABLE
             )
             if (event.maySkipCheckpoint) {
