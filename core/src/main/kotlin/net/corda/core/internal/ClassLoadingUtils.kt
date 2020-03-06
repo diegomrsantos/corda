@@ -1,6 +1,5 @@
 package net.corda.core.internal
 
-import io.github.classgraph.ClassGraph
 import io.github.classgraph.ClassInfo
 import net.corda.core.StubOutForDJVM
 import net.corda.core.serialization.internal.AttachmentURLStreamHandlerFactory.attachmentScheme
@@ -33,7 +32,8 @@ fun <T: Any> createInstancesOfClassesImplementing(classloader: ClassLoader, claz
  */
 @StubOutForDJVM
 fun <T: Any> getNamesOfClassesImplementing(classloader: ClassLoader, clazz: Class<T>): Set<String> {
-    return ClassGraph().overrideClassLoaders(classloader)
+    return privilegedCreateClassGraph()
+        .overrideClassLoaders(classloader)
         .enableURLScheme(attachmentScheme)
         .ignoreParentClassLoaders()
         .enableClassInfo()

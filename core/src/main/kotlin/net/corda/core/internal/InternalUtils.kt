@@ -41,9 +41,12 @@ import java.nio.file.CopyOption
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.security.AccessController.doPrivileged
 import java.security.KeyPair
 import java.security.MessageDigest
 import java.security.PrivateKey
+import java.security.PrivilegedAction
+import java.security.PrivilegedExceptionAction
 import java.security.PublicKey
 import java.security.cert.CertPath
 import java.security.cert.CertPathValidator
@@ -343,15 +346,17 @@ val <T : Any> Class<T>.kotlinObjectInstance: T? get() {
     return try {
         kotlin.objectInstance
     } catch (_: Throwable) {
-        val field = try { getDeclaredField("INSTANCE") } catch (_: NoSuchFieldException) { null }
-        field?.let {
-            if (it.type == this && it.isPublic && it.isStatic && it.isFinal) {
-                it.isAccessible = true
-                uncheckedCast(it.get(null))
-            } else {
-                null
+        doPrivileged(PrivilegedAction<T> {
+            val field = try { getDeclaredField("INSTANCE") } catch (_: NoSuchFieldException) { null }
+            field?.let {
+                if (it.type == this && it.isPublic && it.isStatic && it.isFinal) {
+                    it.isAccessible = true
+                    uncheckedCast(it.get(null))
+                } else {
+                    null
+                }
             }
-        }
+        })
     }
 }
 
@@ -361,7 +366,7 @@ val <T : Any> Class<T>.kotlinObjectInstance: T? get() {
  */
 @DeleteForDJVM
 class DeclaredField<T>(clazz: Class<*>, name: String, private val receiver: Any?) {
-    private val javaField = findField(name, clazz)
+    private val javaField = doPrivileged(PrivilegedExceptionAction { findField(name, clazz) })
     var value: T
         get() {
             synchronized(this) {
@@ -378,14 +383,16 @@ class DeclaredField<T>(clazz: Class<*>, name: String, private val receiver: Any?
     val name: String = javaField.name
 
     private fun <RESULT> Field.accessible(action: Field.() -> RESULT): RESULT {
-        @Suppress("DEPRECATION")    // JDK11: isAccessible() should be replaced with canAccess() (since 9)
-        val accessible = isAccessible
-        isAccessible = true
-        try {
-            return action(this)
-        } finally {
-            isAccessible = accessible
-        }
+        return doPrivileged(PrivilegedExceptionAction {
+            @Suppress("DEPRECATION")    // JDK11: isAccessible() should be replaced with canAccess() (since 9)
+            val accessible = isAccessible
+            isAccessible = true
+            try {
+                action(this)
+            } finally {
+                isAccessible = accessible
+            }
+        })
     }
 
     @Throws(NoSuchFieldException::class)

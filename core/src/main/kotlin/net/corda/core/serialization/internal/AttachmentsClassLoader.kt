@@ -18,6 +18,9 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.*
+import java.security.AccessController.doPrivileged
+import java.security.PrivilegedAction
+import java.security.PrivilegedExceptionAction
 import java.util.*
 
 /**
@@ -44,7 +47,9 @@ class AttachmentsClassLoader(attachments: List<Attachment>,
 
         init {
             // Apply our own URLStreamHandlerFactory to resolve attachments
-            setOrDecorateURLStreamHandlerFactory()
+            doPrivileged(PrivilegedAction {
+                setOrDecorateURLStreamHandlerFactory()
+            })
         }
 
         // Jolokia and Json-simple are dependencies that were bundled by mistake within contract jars.
@@ -321,7 +326,9 @@ object AttachmentsClassLoaderBuilder {
 
         val serializationContext = cache.computeIfAbsent(Key(attachmentIds, params)) {
             // Create classloader and load serializers, whitelisted classes
-            val transactionClassLoader = AttachmentsClassLoader(attachments, params, txId, isAttachmentTrusted, parent)
+            val transactionClassLoader = doPrivileged(PrivilegedAction {
+                AttachmentsClassLoader(attachments, params, txId, isAttachmentTrusted, parent)
+            })
             val serializers = createInstancesOfClassesImplementing(transactionClassLoader, SerializationCustomSerializer::class.java)
             val whitelistedClasses = ServiceLoader.load(SerializationWhitelist::class.java, transactionClassLoader)
                     .flatMap(SerializationWhitelist::whitelist)
@@ -364,7 +371,9 @@ object AttachmentURLStreamHandlerFactory : URLStreamHandlerFactory {
     fun toUrl(attachment: Attachment): URL {
         val id = attachment.id.toString()
         loadedAttachments[id] = attachment
-        return URL(attachmentScheme, "", -1, id, AttachmentURLStreamHandler)
+        return doPrivileged(PrivilegedExceptionAction {
+            URL(attachmentScheme, "", -1, id, AttachmentURLStreamHandler)
+        })
     }
 
     private object AttachmentURLStreamHandler : URLStreamHandler() {
