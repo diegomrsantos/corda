@@ -1,12 +1,18 @@
 package net.corda.node.services.persistence
 
 import net.corda.core.context.InvocationContext
+import net.corda.core.contracts.StateRef
+import net.corda.core.crypto.Crypto
+import net.corda.core.crypto.SecureHash
+import net.corda.core.crypto.SignatureMetadata
+import net.corda.core.crypto.TransactionSignature
 import net.corda.core.flows.FlowLogic
 import net.corda.core.flows.StateMachineRunId
 import net.corda.core.internal.PLATFORM_VERSION
 import net.corda.core.serialization.SerializedBytes
 import net.corda.core.serialization.internal.CheckpointSerializationDefaults
 import net.corda.core.serialization.internal.checkpointSerialize
+import net.corda.core.transactions.SignedTransaction
 import net.corda.node.internal.CheckpointIncompatibleException
 import net.corda.node.internal.CheckpointVerifier
 import net.corda.node.services.api.CheckpointStorage
@@ -16,16 +22,21 @@ import net.corda.node.services.statemachine.ErrorState
 import net.corda.node.services.statemachine.FlowError
 import net.corda.node.services.statemachine.FlowStart
 import net.corda.node.services.statemachine.FlowState
+import net.corda.node.services.statemachine.MyEnum
 import net.corda.node.services.statemachine.SubFlowVersion
 import net.corda.node.services.transactions.PersistentUniquenessProvider
 import net.corda.nodeapi.internal.persistence.CordaPersistence
 import net.corda.nodeapi.internal.persistence.DatabaseConfig
 import net.corda.nodeapi.internal.persistence.DatabaseTransaction
 import net.corda.testing.core.ALICE_NAME
+import net.corda.testing.core.DUMMY_NOTARY_NAME
 import net.corda.testing.core.SerializationEnvironmentRule
 import net.corda.testing.core.TestIdentity
+import net.corda.testing.core.dummyCommand
 import net.corda.testing.internal.LogHelper
 import net.corda.testing.internal.configureDatabase
+import net.corda.testing.internal.createWireTransaction
+import net.corda.testing.internal.rigorousMock
 import net.corda.testing.node.MockServices
 import net.corda.testing.node.MockServices.Companion.makeTestDataSourceProperties
 import org.assertj.core.api.Assertions.assertThat
@@ -51,7 +62,9 @@ internal fun CheckpointStorage.checkpoints(): List<Checkpoint.Serialized> {
 class DBCheckpointStorageTests {
     private companion object {
         val ALICE = TestIdentity(ALICE_NAME, 70).party
+        val DUMMY_NOTARY = TestIdentity(DUMMY_NOTARY_NAME).party
     }
+
 
     @Rule
     @JvmField
@@ -259,9 +272,8 @@ class DBCheckpointStorageTests {
         }
     }
 
-    @Test(timeout = 300_000)
-    fun `update checkpoint with result information`() {
-        val result = "This is the result"
+    fun updateCheckpointWithResult(result: Any?) {
+        //val result = "This is the result"
         val (id, checkpoint) = newCheckpoint()
         val serializedFlowState =
             checkpoint.flowState.checkpointSerialize(context = CheckpointSerializationDefaults.CHECKPOINT_CONTEXT)
@@ -282,6 +294,44 @@ class DBCheckpointStorageTests {
             )
             assertNotNull(session.get(DBCheckpointStorage.DBFlowCheckpoint::class.java, id.uuid.toString()).result)
         }
+    }
+
+    enum class MyEnum {
+        Me,
+        Myself,
+        I
+    }
+
+    @Test(timeout = 300_000)
+    fun `can persist signed transaction as result`() {
+        val wtx = createWireTransaction(
+                inputs = listOf(StateRef(SecureHash.randomSHA256(), 0)),
+                attachments = emptyList(),
+                outputs = emptyList(),
+                commands = listOf(dummyCommand()),
+                notary = DUMMY_NOTARY,
+                timeWindow = null
+        )
+        val dummyTransaction = SignedTransaction(
+                wtx,
+                listOf(TransactionSignature(ByteArray(1),
+                        ALICE.owningKey,
+                        SignatureMetadata(1,
+                        Crypto.findSignatureScheme(ALICE.owningKey).schemeNumberID)))
+        )
+        updateCheckpointWithResult(dummyTransaction)
+    }
+
+    @Test(timeout = 300_000)
+    fun `can perist enum as a result`() {
+        updateCheckpointWithResult(MyEnum.I)
+    }
+
+    @Test(timeout = 300_000)
+    fun `can perist null as a result`() {
+        val result : MyEnum?
+        result = null
+        updateCheckpointWithResult(result)
     }
 
     @Test(timeout = 300_000)
